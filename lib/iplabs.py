@@ -131,7 +131,7 @@ class IPLabViewer():
             # Initialize figure and subplots inside just created widget
             self.fig, self.axs = plt.subplots(subplots[0], subplots[1], num = f'Image {fig_num} - SCIPER: {uid} - Date: ' + date_str)   
         # Set an appropriate size (in inches) for the figure. These are similar to matplotlib default sizes. Modify them to change image physical size. You can also set them constant, in which case, more images --> smaller images.
-        self.fig.set_size_inches([subplots[1]*4.7*0.8, subplots[0]*4.5*0.72]) # (subplots[1]*6.4*0.7, subplots[0]*5.5*0.7 for V layout)
+        self.fig.set_size_inches([subplots[1]*4.7*0.84, subplots[0]*4.5*0.75]) # (subplots[1]*6.4*0.7, subplots[0]*5.5*0.7 for V layout)
         # Set the EPFL logo at the top left corner
         self.fig.figimage(self.logo,  0.01, 0.01, zorder=3, alpha=1)               
         # Make sure that the axs is iterable in one foor loop (1D numpy array)
@@ -258,8 +258,8 @@ class IPLabViewer():
             self.axs[i].xaxis.tick_top()
             count += 1   
         
-        self.fig.tight_layout()
-        self.fig.canvas.font = 'monospace'
+#         self.fig.tight_layout()
+#         self.fig.canvas.font = 'monospace'
             
         ############ Declare widgets and link to callbacks (Names are self selfexplanatory) ############
         
@@ -746,8 +746,13 @@ class IPLabViewer():
                 self.axs_hist[0].set_ylabel('Count')
                 self.axs_hist[0].set_xlabel('Bin')
                 self.axs_hist[0].set_title(self.titles[curr_img])  
-                # We add a slight offset to the xlim to be able to completely visualize the first lim
-                self.axs_hist[0].set_xlim(self.min[curr_img] - 0.01 * (self.max[curr_img] - self.min[curr_img]), self.max[curr_img])
+                if self.max[0] != self.min[0]:
+                    # Assigning this limit is to fully visualize the first bin, otherwise, half of the bin gets lost
+                    self.axs_hist[0].set_xlim(self.min[self.current_image] - 0.01  *(self.max[self.current_image] 
+                                                - self.min[self.current_image]), self.max[self.current_image])
+                else:
+                    # If there is only one value in the image, mpl adjusts automatically but throws warning that we want to hide
+                    self.axs_hist[0].set_xlim(self.min[self.current_image] - 0.05, self.min[self.current_image] + 0.05)
                 self.axs_hist[0].set_ylim(0, 1.1*np.amax(self.hist[curr_img]))
             
                 ### Block to set lines
@@ -781,6 +786,8 @@ class IPLabViewer():
         else:
             self.button_next.disabled = False
             self.button_prev.disabled = False
+        
+#         self.fig.tight_layout()
     
     # In case of any transformation to the image, this function will update the information
     def update_histogram(self):
@@ -821,7 +828,12 @@ class IPLabViewer():
                 self.lines.append(None)
             else:
                 self.axs_hist[i].clear()
-                self.axs_hist[i].set_xlim(self.min[count] - 0.01  *(self.max[count] - self.min[count]), self.max[count])
+                if self.max[count] != self.min[count]:
+                    # Assigning this limit is to fully visualize the first bin, otherwise, half of the bin gets lost
+                    self.axs_hist[i].set_xlim(self.min[count] - 0.01  *(self.max[count] - self.min[count]), self.max[count])
+                else:
+                    # If there is only one value in the image, mpl adjusts automatically but throws warning that we want to hide
+                    self.axs_hist[i].set_xlim(self.min[count] - 0.05, self.min[count] + 0.05)
                 self.axs_hist[i].set_ylim(0, 1.1*np.amax(self.hist[count]))
                 self.axs_hist[i].bar(self.bins[count][:-1], self.hist[count], width = (self.bins[count][1] - self.bins[count][0]) / 1.2)
                 self.lines.append(self.axs_hist[i].plot(self.axs_hist[i].get_xlim(), self.axs_hist[i].get_ylim(), 'k', linewidth = '0.3', linestyle = 'dashed'))
@@ -1007,8 +1019,8 @@ class IPLabViewer():
             # Actually get statistics
             # If there is only one image being selected, range and shape do not keep the list form
             if len(images) == 1:                
-                mean = np.round(plotted.mean(),2)
-                std = np.round(plotted.std(),2)
+                mean = float(np.round(plotted.mean(),2))                
+                std = float(np.round(plotted.std(),2))
                 min_value = np.round(np.amin(plotted),2)                        
                 max_value = np.round(np.amax(plotted),2)    
                 shape = self.original[i].shape                
@@ -1022,22 +1034,20 @@ class IPLabViewer():
                 rang.append((min_value[count], max_value[count]))
             count += 1     
         # Prepare string
-        description = 'mean = {}\nstd_dev = {}\nrange = {}\nsize = {}'.format(mean, std, rang, shape)                
+        description = 'mean = {}\nstd_dev = {}\nrange = {}\nsize = {}'.format(np.round(mean, 2), np.round(std, 2), rang, shape)                
         return(mean, std, min_value, max_value, shape, xlim, ylim, description)
     
-    def save(self, change):
-        global viewer_screenshot
+    def save(self, change):       
         if self.current_image != None:
             viewer_screenshot = np.copy(self.data[self.current_image])
-            viewer_screenshot = viewer_screenshot[int(self.ylim[0][1]):int(self.ylim[0][0]), int(self.xlim[0][0]):int(self.xlim[0][1])]
-            print('Screenshot taken, saved in variable `viewer_screenshot`')
-            print(viewer_screenshot.shape)
+            viewer_screenshot = viewer_screenshot[int(self.ylim[0][1]):int(self.ylim[0][0]), 
+                                                  int(self.xlim[0][0]):int(self.xlim[0][1])]
         else:
             viewer_screenshot = []
             for i in range(len(self.axs)):
                 viewer_screenshot.append(np.copy(self.data[i]))
-                viewer_screenshot[i] = viewer_screenshot[int(self.ylim[i][1]):int(self.ylim[i][0]), int(self.xlim[i][0]):int(self.xlim[i][1])]                
-            print('Screenshot taken. The screenshot of the nth image corresponds to the nth element of the list `viewer_screenshot`')
+                viewer_screenshot[i] = viewer_screenshot[int(self.ylim[i][1]):int(self.ylim[i][0]), 
+                                                         int(self.xlim[i][0]):int(self.xlim[i][1])]                
         return viewer_screenshot
     
     # Hard-coded EPFL BIG logo 
