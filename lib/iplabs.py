@@ -54,6 +54,7 @@ class IPLabViewer():
     - subplots (list or tuple of int): If given, the Axes in the Figures (both for images and histograms) will have the given shape. If missing, the default behaviour will be set (one single image at a time)
     - title (list of strings): Titles of each of the images. The titles should be given in the same order as the images. If missing, the title will  be set to the stringified variable name of the image, 
     - widgets (boolean): Display the widget menu.
+    - joint_zoom (boolean) : Enables joint zooming. Default is False.
     
     If you don't set the parameters 'widgets' or 'hist' to True, then only the image with a button 'Show Widgets' and matplotlib's toolbar will be displayed. In the toolbar you will have three buttons:
     
@@ -120,6 +121,9 @@ class IPLabViewer():
             subplots = kwargs.get('subplots')           
             # Attribute that will be use to check if single_image was required, and If so, which image is currently on display
             self.current_image = None
+            
+        if 'pixel_grid' in kwargs:
+            self.current_image = None
 
         if 'column_view' in kwargs:
             subplots = [self.number_images, 1]
@@ -131,12 +135,17 @@ class IPLabViewer():
             # Initialize figure and subplots inside just created widget
             self.fig, self.axs = plt.subplots(subplots[0], subplots[1], num = f'Image {fig_num} - SCIPER: {uid} - Date: ' + date_str)   
         # Set an appropriate size (in inches) for the figure. These are similar to matplotlib default sizes. Modify them to change image physical size. You can also set them constant, in which case, more images --> smaller images.
-        self.fig.set_size_inches([subplots[1]*4.7*0.84, subplots[0]*4.5*0.75]) # (subplots[1]*6.4*0.7, subplots[0]*5.5*0.7 for V layout)
+        if self.current_image != None:
+            self.fig.set_size_inches([subplots[1]*4.7*1.3, subplots[0]*4.5*1.3])
+        else:
+            self.fig.set_size_inches([subplots[1]*4.7*0.84, subplots[0]*4.5*0.75]) 
+        # (subplots[1]*6.4*0.7, subplots[0]*5.5*0.7 for V layout, (0.84, 0.75) for IP1)
         # Set the EPFL logo at the top left corner
         self.fig.figimage(self.logo,  0.01, 0.01, zorder=3, alpha=1)               
         # Make sure that the axs is iterable in one foor loop (1D numpy array)
         self.axs = np.array(self.axs).reshape(-1)
 
+        
         
         # This code block will get further information on the images, and store it as atttriutes of the object. 
         # First, we create lists to store the info of each image. 
@@ -270,6 +279,10 @@ class IPLabViewer():
         self.slider_clim.observe(self.clim_callback, 'value')        
 
         ################## Buttons ########## 
+        # Enable Joint Zoom
+        self.button_joint_zoom = widgets.Button(description = 'Enable Joint Zoom')
+        self.button_joint_zoom.on_click(self.joint_zoom_callback)
+        
         # Plot Histogram instead of data
         self.button_hist = widgets.Button(description = 'Show Histogram')
         self.button_hist.on_click(self.hist_button_click)
@@ -395,13 +408,29 @@ class IPLabViewer():
         # Color scaling menu (includes clim_slider, reset button, stats, and back button)
         self.b_and_c_view_rightb = widgets.VBox([self.slider_clim, self.button_reset, self.button_back, self.stats_text,])
         
-        # Options Menu (includes cmap_dropdown, show_axis, colorbar, and back buttons, and stats)
-        self.options_view_rightb = widgets.VBox([self.dropdown_cmap, self.button_show_axis, self.button_colorbar,
-                                                 self.button_back, self.stats_text])
-        # If all images are RGB/RGBA, sidable buttons
+        options_widget_list = [self.dropdown_cmap, self.button_show_axis, self.button_colorbar, self.button_joint_zoom,
+                                                 self.button_back, self.stats_text]
+        
+        # If all images are RGB/RGBA, hide buttons
         if all(c in [3, 4] for c in self.channels):
-            self.options_view_rightb = widgets.VBox([self.button_show_axis,
-                                                 self.button_back, self.stats_text])
+            options_widget_list = [self.button_show_axis, self.button_joint_zoom, self.button_back, self.stats_text]
+        
+        # If there is only one image in display, remove button 'Enable joint zoom'
+        if self.current_image != None:
+            options_widget_list.remove(self.button_joint_zoom)
+        
+        self.options_view_rightb = widgets.VBox(options_widget_list)
+        
+#         # Options Menu (includes cmap_dropdown, show_axis, colorbar, and back buttons, and stats)
+#         self.options_view_rightb = widgets.VBox([self.dropdown_cmap, self.button_show_axis, self.button_colorbar, self.button_joint_zoom,
+#                                                  self.button_back, self.stats_text])
+#         # If all images are RGB/RGBA, sidable buttons
+#         if all(c in [3, 4] for c in self.channels):
+#             self.options_view_rightb = widgets.VBox([self.button_show_axis, self.button_joint_zoom,
+#                                                  self.button_back, self.stats_text])
+            
+#         if self.current_image == None:
+#             self.options_view_rightb.remove()
 
         
         # Extra_widgets menu (includes sliders, stats, and back button).
@@ -420,8 +449,11 @@ class IPLabViewer():
         # Initialize histogram figure. The subplots shape is the same as in the images figure
         with self.out_hist:            
             self.fig_hist, self.axs_hist = plt.subplots(subplots[0], subplots[1], num = f'Histogram {fig_num} - SCIPER: {uid}') 
-        self.fig_hist.set_size_inches([subplots[1]*4.7*0.65, subplots[0]*4.5*0.72]) #(V layout: See self.fig)
-        
+#         self.fig_hist.set_size_inches([subplots[1]*4.7*0.65, subplots[0]*4.5*0.72]) #(V layout: See self.fig)
+        if self.current_image != None:
+            self.fig_hist.set_size_inches([subplots[1]*4.7*0.5, subplots[0]*4.5*0.55])
+        else:
+            self.fig_hist.set_size_inches([subplots[1]*4.7*0.84, subplots[0]*4.5*0.75]) 
 #         self.fig_hist.canvas.toolbar_visible = False
         # (uncomment next line to) Set EPFL BIG logo
 #         self.fig_hist.figimage(self.logo,  0.01, 0.01, zorder=3, alpha=1)       
@@ -464,6 +496,8 @@ class IPLabViewer():
         if kwargs.get('colorbar', False): 
             self.button_colorbar.description = 'Hide Colorbar'
             self.set_colorbar()
+        if kwargs.get('joint_zoom', False):
+            self.joint_zoom_callback()
         # Set view and call functions to arrange statistics, widget menu, and histogram lines
         self.view = 'initial'
         self.update_stats()
@@ -499,7 +533,23 @@ class IPLabViewer():
             count +=1
         self.update_hist_lines()
     
-    ## Button Callbacks    
+    ## Button Callbacks 
+    def joint_zoom_callback(self, change=None):
+        if self.button_joint_zoom.description == 'Enable Joint Zoom':
+            self.button_joint_zoom.description = 'Disable Joint Zoom'
+            # Share axes for joint zooming
+            for i in range(len(self.axs)-1):
+                self.axs[i].get_shared_x_axes().join(self.axs[i], self.axs[i+1])
+                self.axs[i].get_shared_y_axes().join(self.axs[i], self.axs[i+1])
+        else:
+            self.button_joint_zoom.description = 'Enable Joint Zoom'
+            # Unshare axes for individual zooming
+            for i in range(len(self.axs)):
+                g = self.axs[i].get_shared_x_axes();  
+                [g.remove(a) for a in g.get_siblings(self.axs[i])]
+                g = self.axs[i].get_shared_y_axes();  
+                [g.remove(a) for a in g.get_siblings(self.axs[i])]
+    
     def hist_button_click(self, change):
         # Check the current state, change, and act accordingly
         if self.button_hist.description == 'Show Histogram':           
@@ -533,7 +583,9 @@ class IPLabViewer():
         self.dropdown_cmap.value = self.cmap_orig                     
         # Get images back to the originals (In case any function/ transformation has been applied)
         for i in range(self.number_images):
-            self.data[i] = np.copy(self.original[i])           
+            self.data[i] = np.copy(self.original[i])
+            self.max[i] = np.amax(self.data[i])
+            self.min[i] = np.amin(self.data[i])
         # This for loop replots every image (Redefines the AxesImage in the attribute self.im)
         for i in range(self.number_images):
             # If there is only one image, act on this one (self.current_image) and break loop
@@ -613,6 +665,8 @@ class IPLabViewer():
             self.data[i] = np.copy(self.original[i])
             # Call the function defined by the user on the current image
             self.data[i] = self.usr_defined_callbacks[0](self.data[i])
+            self.max[i] = np.amax(self.data[i])
+            self.min[i] = np.amin(self.data[i])
             
         # Update plot. If condition checks is there is only one image being displayed
         if self.current_image != None:
@@ -634,7 +688,7 @@ class IPLabViewer():
         self.update_histogram()
         
 ##########################################################     
-## Update_stats() & pdate_view: Either of those get called on 
+## Update_stats() & update_view: Either of those get called on 
 ## every widget update, for the visualization to respond accordingly
 ########################################################## 
                 
@@ -834,7 +888,7 @@ class IPLabViewer():
                 else:
                     # If there is only one value in the image, mpl adjusts automatically but throws warning that we want to hide
                     self.axs_hist[i].set_xlim(self.min[count] - 0.05, self.min[count] + 0.05)
-                self.axs_hist[i].set_ylim(0, 1.1*np.amax(self.hist[count]))
+                self.axs_hist[i].set_ylim(0, 1.1*np.amax(self.hist[count]) + 0.05)
                 self.axs_hist[i].bar(self.bins[count][:-1], self.hist[count], width = (self.bins[count][1] - self.bins[count][0]) / 1.2)
                 self.lines.append(self.axs_hist[i].plot(self.axs_hist[i].get_xlim(), self.axs_hist[i].get_ylim(), 'k', linewidth = '0.3', linestyle = 'dashed'))
                 # Hide only y-axis ticks by default
@@ -858,10 +912,14 @@ class IPLabViewer():
                     # Update xlim attribute
                     self.xlim[i] = np.round(event_ax.get_xlim(),1)
                     break
-                # Look for the Axes which had the changes
-                if event_ax == self.axs[i]:
+                # Check if joint zoom is on
+                if self.button_joint_zoom.description == 'Disable Joint Zoom':
+                    self.xlim[i] = np.round(event_ax.get_xlim(),1)
+                # Else look for the Axes which had the changes
+                elif event_ax == self.axs[i]:
                     # Once found, update xlimits
                     self.xlim[i] = np.round(event_ax.get_xlim(),1)
+                
             self.update_stats()
             
         def on_ylims_change(event_ax):
@@ -869,8 +927,11 @@ class IPLabViewer():
                 if len(self.axs) == 1:
                     self.ylim[i] = np.round(event_ax.get_ylim(),1)
                     break
-                if event_ax == self.axs[i]:
+                if self.button_joint_zoom.description == 'Disable Joint Zoom':
                     self.ylim[i] = np.round(event_ax.get_ylim(),1)
+                elif event_ax == self.axs[i]:
+                    self.ylim[i] = np.round(event_ax.get_ylim(),1)
+                
             self.update_stats()
             
         count = 0            
