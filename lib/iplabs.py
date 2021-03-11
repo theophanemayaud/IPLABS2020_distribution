@@ -342,11 +342,11 @@ class IPLabViewer():
         # Choose a colormap. Try to get the user one, otherwise set to 'gray'
         self.cmap_orig = kwargs.get('cmap', 'gray')
         # If the usermap from the user is not supported, we use it (we have already plotted the image) but set the Dropdown menu to gray 
-        if not(self.cmap_orig in ['gray', 'viridis', 'inferno', 'ocean', 'nipy_spectral', 'copper', 'spring', 'magma']):
+        if not(self.cmap_orig in ['gray', 'viridis', 'inferno', 'ocean', 'nipy_spectral', 'copper', 'spring', 'magma', 'hsv']):
             self.cmap_orig = 'gray'
         # Declare Dropdown menu
         self.dropdown_cmap = widgets.Dropdown(options = ['gray', 'viridis', 'inferno', 'ocean', 
-                                                         'nipy_spectral', 'copper', 'spring', 'magma'], 
+                                                         'nipy_spectral', 'copper', 'spring', 'magma', 'hsv'], 
                                               value = self.cmap_orig, 
                                               disabled = False, 
                                               layout = widgets.Layout(width = '65%'))
