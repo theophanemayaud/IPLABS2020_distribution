@@ -2,14 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.lines as lines
 import ipywidgets as widgets
-import cv2
+import cv2 as cv
 # To stringify variables
 import inspect
 # To get user ID 
 import getpass
 # For timestamp
 import time 
-
+from matplotlib.animation import ArtistAnimation
 
 # This block is to hide mpl buttons (un)comment to enable or disable buttons
 from matplotlib import backend_bases
@@ -145,8 +145,6 @@ class IPLabViewer():
         # Make sure that the axs is iterable in one foor loop (1D numpy array)
         self.axs = np.array(self.axs).reshape(-1)
 
-        
-        
         # This code block will get further information on the images, and store it as atttriutes of the object. 
         # First, we create lists to store the info of each image. 
         self.original = []         # Store the originals 
@@ -368,6 +366,48 @@ class IPLabViewer():
             self.button_show_x_w.on_click(self.x_w_button_callback)
             # Link last widget (button) to the given callback
             self.usr_defined_widgets[-1].on_click(self.x_w_callback)
+        
+        # store Line2d objects generated when plotting clickable points
+        self.clickable = False
+        self.block_clicks = False
+        if 'clickable' in kwargs:
+            self.clickable = True
+            # Create textarea widget
+            self.txt = widgets.Textarea(
+                    value ='',
+                    placeholder='',
+                    description='',
+                    disabled=False
+                )
+            # save mouse coordinates
+            self.mouse_coords = []
+            # keep track of click count
+            self.click_count = 0
+            # line coordinates
+            self.lines = []
+
+            self.line = False
+
+            if 'line' in kwargs:
+                self.line = True
+
+            if 'subplots' in kwargs:
+                self.subplot_click = True
+
+
+            # event listener on click
+            self.cid = self.fig.canvas.mpl_connect('button_press_event', self.onclick)
+
+            #if (self.line) : 
+
+             #   self.fig.canvas.mpl_connect('motion_notify_event', self.mouse_move)
+
+
+
+
+          # Dynamically update the text box above
+
+# Create an hard reference to the callback not to be cleared by the garbage collector
             
 
         ########################## Wrap widgets in boxes, according to the menu and use case ################################
@@ -576,7 +616,20 @@ class IPLabViewer():
         self.view = 'x_widget'
         self.update_view()
             
+    def reset_clickables(self):
+        # Reset clickable parameters
+        self.click_count = 0
+        self.mouse_coords = []
+        # Remove clicked points
+        for i in range(self.number_images):
+            for j in range(len(self.axs[i].lines)):
+                self.axs[i].lines[0].remove()
+    
     def reset(self, change):
+        if self.clickable:
+            self.reset_clickables()
+            self.block_clicks = False
+        
         # Get all parameters of the object to initial values    
         self.slider_clim.value = [0, 100]
         self.view == 'initial'
@@ -586,6 +639,7 @@ class IPLabViewer():
             self.data[i] = np.copy(self.original[i])
             self.max[i] = np.amax(self.data[i])
             self.min[i] = np.amin(self.data[i])
+                    
         # This for loop replots every image (Redefines the AxesImage in the attribute self.im)
         for i in range(self.number_images):
             # If there is only one image, act on this one (self.current_image) and break loop
@@ -659,12 +713,36 @@ class IPLabViewer():
         
     # Callback used when user declares an extra widget
     def x_w_callback(self, change):
+        # Accept both lists and np arrays
+        self.usr_defined_callbacks = np.array(self.usr_defined_callbacks)
+        # First, we check wether there is one or several callbacks
+        multi_callback = False
+        if self.usr_defined_callbacks.size > 1:
+            # If more than one callback, we want a callback per image. (look at exception)
+            if self.usr_defined_callbacks.size != len(self.original):
+                raise Exception('Please provide either one callback, or the exact number of callbacks as images. The nth callback\
+                                will be applied to the nth image')
+            multi_callback = True
+            
         # Iterate through all images
         for i in range(self.number_images):
             # Restore image, so to perform operation on original
             self.data[i] = np.copy(self.original[i])
             # Call the function defined by the user on the current image
-            self.data[i] = self.usr_defined_callbacks[0](self.data[i])
+            if multi_callback:
+                self.data[i] = self.usr_defined_callbacks[i](self.data[i])
+            else:
+                if (not self.clickable ):
+                    self.data[i] = self.usr_defined_callbacks[0](self.data[i])
+                else:
+                    # If clickable, add mouse coords to the callback function
+                    if(i==0):
+                        if self.line:
+                            self.data[0] = self.usr_defined_callbacks[0](self.data[0], self.mouse_coords)
+                        else:
+                            self.data[0] = self.usr_defined_callbacks[0](self.data[0], self.mouse_coords)
+                            self.reset_clickables()
+                        self.block_clicks = True
             self.max[i] = np.amax(self.data[i])
             self.min[i] = np.amin(self.data[i])
             
@@ -677,12 +755,14 @@ class IPLabViewer():
             self.im = []
             count = 0
             # Iterate through every axis
+            i = 0
             for ax in self.axs:
                 #Replot the results of the operation with the proper parameters
-                self.im.append(ax.imshow(self.data[count], cmap = self.dropdown_cmap.value, 
+                self.im.append(ax.imshow(self.data[i], cmap = self.dropdown_cmap.value, 
                               clim = (self.slider_clim.value[0]*0.01*(self.max[i] - self.min[i]) + self.min[i], 
                                       self.slider_clim.value[1]*0.01*(self.max[i] - self.min[i]) + self.min[i],)))
                 count += 1
+                i += 1
         # Update statistics and histogram
         self.update_stats()
         self.update_histogram()
@@ -692,11 +772,99 @@ class IPLabViewer():
 ## every widget update, for the visualization to respond accordingly
 ########################################################## 
                 
-    def update_stats(self):
+    def update_stats(self, clicks = ""):
         # Get statistics
         _, _, _, _, _, _, _, descriptive_string = self.get_statistics()       
         # Update stats_text_widget
-        self.stats_text.value = descriptive_string
+        self.stats_text.value = descriptive_string + clicks
+
+
+
+# clickable processings
+    def onclick(self,event):
+        if not self.block_clicks:
+            # need only for points for mapping
+            if (not self.line):
+                index=len(self.mouse_coords)%2
+                # check that user in on the right subplot
+                if (event.inaxes == self.axs[index]):
+                    if len(self.mouse_coords) < 4:
+                        # increment click count upon new entry
+                        self.click_count +=1
+                        # register mouse coordinates on click
+                        self.mouse_coords.append({'click': self.click_count, 'x' : event.xdata,
+                                      'y' : event.ydata})
+
+                        self.txt.value =str([str("click:%d,x=%f, y=%f"%(item['click'],item['x'],item['y'])) for item in self.mouse_coords])
+                        # print coordinates in statistics section
+                        self.update_stats(self.txt.value)
+                        # draw according points on canvas
+                        self.draw_point(index)
+                    else:
+                        self.reset_clickables()
+
+            else:
+                if len(self.mouse_coords) <2 :
+
+                    self.mouse_coords.append({'click': self.click_count, 'x' : event.xdata,
+                                  'y' : event.ydata})
+                    self.txt.value =str([str("click:%d,x=%f, y=%f"%(item['click'],item['x'],item['y'])) for item in self.mouse_coords])
+
+                    self.update_stats(self.txt.value)
+
+                    if len(self.mouse_coords) % 2 == 1: 
+                        self.draw_point(0)
+                    else: 
+                        self.draw_line()
+
+
+                # draw line if it is specified
+
+
+    #def mouse_move(self, event):
+       # if not event.inaxes:
+                return
+            #dtaw a temporary line from a single point to the mouse position
+            #delete the temporary line when mouse move to another position
+
+
+
+      #  if len(self.mouse_coords) % 2 == 1:
+           # line = self.axs[0].plot([self.mouse_coords[-1]['x'], event.xdata], [self.mouse_coords[-1]['y'], event.ydata], 'r')
+          ##  self.append(line) 
+           # self.axs[0].draw_artist(self.lines[-1])
+          ##  self.fig.canvas.blit(self.axs[0].bbox)
+          #  self.axs[0].lines=self.axs[0].lines.pop()
+
+
+
+
+
+
+
+
+
+
+
+    def draw_line(self):
+        x = [p['x'] for p in self.mouse_coords]
+        y = [p['y'] for p in self.mouse_coords]
+
+        point = self.axs[0].plot(x,y,'ro',80)
+
+        self.lines.append(self.axs[0].plot(x,y,'r',80)[0])
+        self.append(point)
+
+
+        self.fig.canvas.draw()
+
+
+    def draw_point(self,index):
+            color = ['ro','bo']
+            x = [p['x'] for i,p in enumerate(self.mouse_coords) if i %2 ==index]
+            y = [p['y'] for i,p in enumerate(self.mouse_coords) if i %2 ==index]
+            self.axs[index].plot(x,y,color[index])
+            self.fig.canvas.draw()
         
     def update_hist_lines(self): 
         count = 0
